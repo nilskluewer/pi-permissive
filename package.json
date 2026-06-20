@@ -1,7 +1,7 @@
 {
-  "name": "pi-permissions",
-  "version": "0.1.0",
-  "description": "A deliberately permissive permission gate for the pi coding agent. Blocks only destructive commands, stays out of the way of normal work.",
+  "name": "pi-permissive",
+  "version": "0.2.0",
+  "description": "A deliberately permissive permission gate for pi — blocks only destructive commands, never nags.",
   "type": "module",
   "keywords": [
     "pi-package",
@@ -16,10 +16,10 @@
     "name": "Nils Klüwer"
   },
   "license": "MIT",
-  "homepage": "https://github.com/nilskluewer/pi-permissions",
+  "homepage": "https://github.com/nilskluewer/pi-permissive",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nilskluewer/pi-permissions.git"
+    "url": "git+https://github.com/nilskluewer/pi-permissive.git"
   },
   "files": [
     "extensions",

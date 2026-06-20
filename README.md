@@ -1,4 +1,4 @@
-# pi-permissions
+# pi-permissive
 
 A deliberately **permissive** permission gate for the [pi coding agent](https://github.com/earendil-works/pi).
 
@@ -38,9 +38,15 @@ and `;`, so chained commands never prompt):
 ## Install
 
 ```bash
-pi install git:github.com/nilskluewer/pi-permissions
+pi install git:github.com/nilskluewer/pi-permissive
 # or pin a version/tag:
-pi install git:github.com/nilskluewer/pi-permissions@v0.1.0
+pi install git:github.com/nilskluewer/pi-permissive@v0.2.0
+```
+
+Also available on npm:
+
+```bash
+pi install npm:pi-permissive
 ```
 
 ## Tests
