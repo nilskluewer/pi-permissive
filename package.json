@@ -1,6 +1,6 @@
 {
   "name": "pi-permissive",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A deliberately permissive permission gate for pi — blocks only destructive commands, never nags.",
   "type": "module",
   "keywords": [
