@@ -28,7 +28,7 @@
     "LICENSE"
   ],
   "pi": {
-    "extensions": ["./extensions"]
+    "extensions": ["./extensions/permissions.ts"]
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
