@@ -1,0 +1,36 @@
+{
+  "name": "pi-permissions",
+  "version": "0.1.0",
+  "description": "A deliberately permissive permission gate for the pi coding agent. Blocks only destructive commands, stays out of the way of normal work.",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "pi-extension",
+    "permissions",
+    "security",
+    "access-control"
+  ],
+  "author": {
+    "name": "Nils Klüwer"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/nilskluewer/pi-permissions",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nilskluewer/pi-permissions.git"
+  },
+  "files": [
+    "extensions",
+    "sandbox",
+    "README.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "extensions": ["./extensions"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  }
+}
