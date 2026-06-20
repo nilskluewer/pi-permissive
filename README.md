@@ -1,49 +1,38 @@
 # pi-permissive
 
-A deliberately **permissive** permission gate for the [pi coding agent](https://github.com/earendil-works/pi).
+A permissive permission gate for [pi](https://github.com/earendil-works/pi) — it stays out of your way, only gating what genuinely matters, and never hard-blocks anything you might legitimately want to do.
 
-Most permission systems prompt constantly and get in the way. This one stays
-out of the way: it **only blocks commands that are genuinely destructive**, and
-lets everything else through silently — no prompts, no friction.
+## Rules
 
-## What it blocks
+**DENY** — hard block, never runs:
 
-**Bash** (evaluated against the *whole* command string, including after `&&`
-and `;`, so chained commands never prompt):
-
-- Force push (`git push --force` / `-f`) — `--force-with-lease` is allowed
-- Pushing directly to `main` (your protected branch)
-- `git reset --hard`, `git clean -f`, `git branch -D`, `git filter-branch`,
-  `git reflog expire`, `git update-ref -d`
-- `rm -rf` on system/home paths (`/`, `/Users`, `/home`, `/etc`, `~/`, `$HOME`, …)
+- `git push --force` to `main`
+- `rm -rf` on system/home paths (`/`, `/Users`, `~/`, `$HOME`, …)
 - `sudo rm`
 - `mkfs`, `dd … of=/dev/…`, `shutdown`/`reboot`/`halt`/`poweroff`
 - Fork bombs
+- Writing/editing credentials & keys (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gh`, `.netrc`, `id_rsa`, `*.pem`, `*.key`)
 
-**Write / edit** paths:
+**ASK** — prompts you; runs if you approve, blocks if you decline or there's no UI:
 
-- `.env` (but not `.env.example`)
-- `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gh`, `.netrc`
-- Private keys (`id_rsa`, `id_ed25519`, `*.pem`, `*.key`)
+- `git push --force` (to non-main branches; `--force-with-lease` is silent)
+- `git push` to `main`
+- `git push --delete` (remote ref deletion)
+- `git reset --hard`, `git clean -f`, `git branch -d`/`-D`, `git filter-branch`, `git reflog expire`, `git update-ref -d`
+- Reading or writing `.env` files
+- Reading any credential/key path
 
-**Read** is always allowed. Unknown tools pass through.
-
-## What it does NOT do
-
-- No config file. Behaviour is encoded directly in `extensions/permissions.ts`
-  so it's easy to read and edit.
-- No "ask" tier. If a command isn't on the deny list, it runs. This is the
-  whole point — to stop the constant permission prompts.
+**ALLOW** — everything else, silently. This is the default.
 
 ## Install
 
 ```bash
 pi install git:github.com/nilskluewer/pi-permissive
-# or pin a version/tag:
-pi install git:github.com/nilskluewer/pi-permissive@v0.2.0
+# or pin a version:
+pi install git:github.com/nilskluewer/pi-permissive@v0.3.0
 ```
 
-Also available on npm:
+Also on npm:
 
 ```bash
 pi install npm:pi-permissive
@@ -51,16 +40,14 @@ pi install npm:pi-permissive
 
 ## Tests
 
-The decision logic is split into pure, exported functions
-(`decideBash`, `decidePath`, `decide`) so it can be unit-tested without
-spinning up pi.
-
 ```bash
 cd sandbox/permission-tests
-./run.sh            # or: node --test --experimental-strip-types permissions.test.ts
+./run.sh
 ```
 
-Requires Node 22.6+ for native TypeScript type stripping.
+Requires Node 22.6+. The suite includes deterministic self-validation: every
+rule carries match/no-match examples that are checked against its own regex,
+so you can't change a pattern without proving what it matches.
 
 ## License
 

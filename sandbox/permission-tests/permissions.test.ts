@@ -6,50 +6,59 @@
  *
  * (Node 22.6+ strips types natively. Node 26 does this by default.)
  *
- * Tests cover three buckets for bash and paths:
- *   - DENY : must be blocked
- *   - ALLOW: must pass silently (the permissive default)
- *   - ASK  : n/a for this extension — there is no "ask" tier, so we only
- *            assert these are NOT blocked. (Listed for completeness so the
- *            intent of borderline commands is documented.)
+ * Tests cover three tiers for bash and paths:
+ *   - DENY : must return { action: "deny" }  (hard block, no prompt)
+ *   - ASK  : must return { action: "ask" }   (prompt the user)
+ *   - ALLOW: must return undefined           (silent pass-through)
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decide, decideBash, decidePath } from "../../extensions/permissions.ts";
+import {
+  decide,
+  classifyBash,
+  classifyWrite,
+  classifyRead,
+} from "../../extensions/permissions.ts";
 
 // --------------------------------------------------------------------------
 // helpers
 // --------------------------------------------------------------------------
 
-function denied(tool: string, input: object) {
-  const d = decide(tool, input);
-  assert.ok(d?.block, `expected DENY but got ALLOW for ${tool} ${JSON.stringify(input)}`);
+function expectVerdict(
+  tier: "deny" | "ask",
+  tool: string,
+  input: object,
+) {
+  const v = decide(tool, input);
+  assert.ok(
+    v && v.action === tier,
+    `expected ${tier.toUpperCase()} but got ${JSON.stringify(v)} for ${tool} ${JSON.stringify(input)}`,
+  );
 }
 
+const denied = (tool: string, input: object) => expectVerdict("deny", tool, input);
+const asked = (tool: string, input: object) => expectVerdict("ask", tool, input);
+
 function allowed(tool: string, input: object) {
-  const d = decide(tool, input);
-  assert.equal(d, undefined, `expected ALLOW but got ${JSON.stringify(d)} for ${tool} ${JSON.stringify(input)}`);
+  const v = decide(tool, input);
+  assert.equal(
+    v,
+    undefined,
+    `expected ALLOW but got ${JSON.stringify(v)} for ${tool} ${JSON.stringify(input)}`,
+  );
 }
 
 // --------------------------------------------------------------------------
-// bash — must DENY
+// bash — DENY (catastrophic / irreversible)
 // --------------------------------------------------------------------------
 
 const BASH_DENY: string[] = [
+  // force push to main (worst case — rewrites shared protected history)
   "git push --force origin main",
   "git push origin main --force",
-  "git push -f origin feat",
-  "git push origin main",
-  "git push origin main:main",
-  "git push origin HEAD:main",
-  "git push origin refs/heads/main",
-  "git reset --hard origin/main",
-  "git clean -fd",
-  "git clean -fdx",
-  "git branch -D feat/x",
-  "git filter-branch -- --all",
-  "git reflog expire --expire=now --all",
-  "git update-ref -d refs/heads/old",
+  "git push -f origin main",
+  "git push --force origin HEAD:main",
+  // catastrophic filesystem / system
   "rm -rf /",
   "rm -rf /Users/foo",
   "rm -rf /home/x",
@@ -64,12 +73,43 @@ const BASH_DENY: string[] = [
   ":(){ :|:& };:",
 ];
 
-test("bash: destructive commands are DENIED", () => {
+test("bash: catastrophic commands are DENIED", () => {
   for (const cmd of BASH_DENY) denied("bash", { command: cmd });
 });
 
 // --------------------------------------------------------------------------
-// bash — must ALLOW (permissive default; no prompt)
+// bash — ASK (risky but legitimate; user can approve)
+// --------------------------------------------------------------------------
+
+const BASH_ASK: string[] = [
+  // force push to a non-main branch (force-with-lease stays silent/allowed)
+  "git push --force origin feat",
+  "git push -f origin feat",
+  "git push origin feat --force",
+  // pushing directly to main (non-force)
+  "git push origin main",
+  "git push origin HEAD:main",
+  "git push origin main:main",
+  "git push origin refs/heads/main",
+  // deleting remote refs
+  "git push origin --delete feat",
+  // local history/work ops
+  "git reset --hard origin/main",
+  "git clean -fd",
+  "git clean -fdx",
+  "git branch -D feat/x",
+  "git branch -d old-branch",   // pruning local branches -> ASK, not deny
+  "git filter-branch -- --all",
+  "git reflog expire --expire=now --all",
+  "git update-ref -d refs/heads/old",
+];
+
+test("bash: risky-but-legitimate commands are ASKED", () => {
+  for (const cmd of BASH_ASK) asked("bash", { command: cmd });
+});
+
+// --------------------------------------------------------------------------
+// bash — ALLOW (permissive default; no prompt)
 // --------------------------------------------------------------------------
 
 const BASH_ALLOW: string[] = [
@@ -78,18 +118,18 @@ const BASH_ALLOW: string[] = [
   "echo '--- follow redirect ---'; curl -sIL https://nilskluewer.dev/google17960a29cf544530.html | grep -iE 'HTTP|location'",
   "git push origin feat/improve-ui",
   "git push -u origin docs/no-push-to-main-rule",
-  "git push origin feat-main",
+  "git push origin feat-main",       // branch name contains "main" but isn't main
   "git push origin maintain",
   "git push origin refs/heads/feat/main-branch",
-  // force-with-lease is allowed (safer)
+  // force-with-lease is allowed silently (safer)
   "git push --force-with-lease origin feat",
   // normal git ops
   "git reset --soft HEAD~1",
   "git reset HEAD~1",
   "git checkout main",
-  "git branch -d old-branch",
   "git stash",
   "git push origin feature",
+  "git push origin main:feature",     // local main -> remote feature (not to main)
   // rm that is NOT recursive-forced on system paths
   "rm file.txt",
   "rm -f ./build/tmp.log",
@@ -111,39 +151,32 @@ test("bash: normal / chained commands are ALLOWED", () => {
   for (const cmd of BASH_ALLOW) allowed("bash", { command: cmd });
 });
 
-// Compound edge case: a DENY buried inside a `&&` chain must still be caught,
-// because we match the whole string. Build a few composed commands.
-test("bash: deny rule fires even when buried in a compound command", () => {
-  denied("bash", { command: "cd repo && git add -A && git push origin main" });
-  denied("bash", { command: "echo hi; git reset --hard HEAD~1; echo bye" });
-  denied("bash", { command: "git commit -m x && git push --force origin main" });
+// Compound edge cases: a rule must fire even when buried in a `&&` / `;` chain.
+test("bash: rules fire even when buried in a compound command", () => {
+  denied("bash", { command: "cd repo && git add -A && git push --force origin main" });
+  asked("bash", { command: "cd repo && git add -A && git push origin main" });
+  asked("bash", { command: "echo hi; git reset --hard HEAD~1; echo bye" });
+  asked("bash", { command: "git commit -m x && git branch -D feat/x" });
 });
-
-// --------------------------------------------------------------------------
-// bash — borderline commands documented as NOT blocked (the "ask" tier we
-// intentionally collapsed to allow). Asserting ALLOW so the choice is explicit.
-// --------------------------------------------------------------------------
 
 test("bash: borderline commands are ALLOWED by design (documented)", () => {
   const borderline = [
     "rm -rf .",                          // cwd-relative; not a system path
     "rm -rf ../sibling",                 // relative, not under a protected root
-    "git push origin main:feature",      // pushes local main to remote feature (not to main)
     "git checkout -- file.txt",          // discards local changes
     "git restore file.txt",
-    "git stash drop",                    // loses a stash
+    "git stash drop",                    // loses a stash (not gated)
+    "git commit --amend",                // local history, common
+    "git rebase main",                   // local, common
   ];
   for (const cmd of borderline) allowed("bash", { command: cmd });
 });
 
 // --------------------------------------------------------------------------
-// paths — must DENY (write / edit)
+// write / edit — DENY (credentials / keys; agent must never overwrite)
 // --------------------------------------------------------------------------
 
-const PATH_DENY: string[] = [
-  ".env",
-  ".env.local",
-  "/app/.env",
+const WRITE_DENY: string[] = [
   "/Users/x/.ssh/id_rsa",
   "/Users/x/.ssh/config",
   "/Users/x/.aws/credentials",
@@ -156,58 +189,101 @@ const PATH_DENY: string[] = [
   "/secrets/ca.key",
 ];
 
-test("paths: sensitive paths are DENIED for write/edit", () => {
-  for (const path of PATH_DENY) {
+test("write/edit: credential & key paths are DENIED", () => {
+  for (const path of WRITE_DENY) {
     denied("write", { path });
     denied("edit", { path });
   }
 });
 
 // --------------------------------------------------------------------------
-// paths — must ALLOW
+// write / edit — ASK (.env)
 // --------------------------------------------------------------------------
 
-const PATH_ALLOW: string[] = [
+const WRITE_ASK: string[] = [".env", ".env.local", "/app/.env"];
+
+test("write/edit: real .env files are ASKED", () => {
+  for (const path of WRITE_ASK) {
+    asked("write", { path });
+    asked("edit", { path });
+  }
+});
+
+// --------------------------------------------------------------------------
+// write / edit — ALLOW
+// --------------------------------------------------------------------------
+
+const WRITE_ALLOW: string[] = [
   "index.html",
   "/Users/nilskluewer/GitCodex/website-nilskluewer-dev/styles.css",
   "~/GitCodex/repo/script.js",
   "src/index.ts",
   "AGENTS.md",
-  ".env.example",          // examples are fine (not a real secret)
+  ".env.example",          // template, not a real secret
   "docs/setup.md",
   "/tmp/build.log",
 ];
 
-test("paths: normal files are ALLOWED for write/edit", () => {
-  for (const path of PATH_ALLOW) {
+test("write/edit: normal files are ALLOWED", () => {
+  for (const path of WRITE_ALLOW) {
     allowed("write", { path });
     allowed("edit", { path });
   }
 });
 
 // --------------------------------------------------------------------------
-// tool routing
+// read — secrets are ASK (not silent), nothing is hard-denied for read
 // --------------------------------------------------------------------------
 
-test("read is always allowed, even on sensitive paths", () => {
-  allowed("read", { path: "/Users/x/.ssh/id_rsa" });
-  allowed("read", { path: ".env" });
+test("read: secrets & .env are ASKED (never silently read)", () => {
+  const secret = [
+    ".env",
+    ".env.local",
+    "/app/.env",
+    "/Users/x/.ssh/id_rsa",
+    "/Users/x/.aws/credentials",
+    "/Users/x/.gnupg/secring.gpg",
+    "/Users/x/.config/gh/hosts.yml",
+    "/Users/x/.netrc",
+    "id_rsa",
+    "/home/x/.ssh/id_ed25519",
+    "/etc/ssl/private/server.pem",
+    "/secrets/ca.key",
+  ];
+  for (const path of secret) asked("read", { path });
 });
+
+test("read: normal files are ALLOWED", () => {
+  for (const path of WRITE_ALLOW) allowed("read", { path });
+});
+
+test("read: .env.example is ALLOWED (not a real secret)", () => {
+  allowed("read", { path: ".env.example" });
+});
+
+// --------------------------------------------------------------------------
+// tool routing & standalone classifiers
+// --------------------------------------------------------------------------
 
 test("unknown tools are allowed (passthrough)", () => {
   allowed("mcp_foo", { command: "rm -rf /" });
 });
 
-test("decideBash / decidePath work standalone", () => {
-  assert.ok(decideBash("git push origin main")?.block);
-  assert.equal(decideBash("ls"), undefined);
-  assert.ok(decidePath(".env")?.block);
-  assert.equal(decidePath("index.html"), undefined);
+test("classifiers work standalone", () => {
+  assert.equal(classifyBash("git push --force origin main")?.action, "deny");
+  assert.equal(classifyBash("git push origin main")?.action, "ask");
+  assert.equal(classifyBash("ls"), undefined);
+  assert.equal(classifyWrite("/Users/x/.ssh/id_rsa")?.action, "deny");
+  assert.equal(classifyWrite(".env")?.action, "ask");
+  assert.equal(classifyWrite("index.html"), undefined);
+  assert.equal(classifyRead(".env")?.action, "ask");
+  assert.equal(classifyRead("index.html"), undefined);
 });
 
 test("empty / undefined inputs do not throw", () => {
   allowed("bash", {});
   allowed("write", {});
   allowed("edit", {});
+  allowed("read", {});
   allowed("bash", { command: "" });
 });
