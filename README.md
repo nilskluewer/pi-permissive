@@ -1,6 +1,9 @@
 # pi-permissive
 
-A permissive permission gate for [pi](https://github.com/earendil-works/pi) — it stays out of your way, only gating what genuinely matters, and never hard-blocks anything you might legitimately want to do.
+[![npm version](https://img.shields.io/npm/v/pi-permissive?style=for-the-badge)](https://www.npmjs.com/package/pi-permissive)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+
+A permissive permission gate for the [Pi coding agent](https://github.com/earendil-works/pi) — it stays out of your way, only gating what genuinely matters, and never hard-blocks anything you might legitimately want to do.
 
 ## Rules
 
@@ -27,22 +30,29 @@ A permissive permission gate for [pi](https://github.com/earendil-works/pi) — 
 ## Install
 
 ```bash
+pi install npm:pi-permissive
+```
+
+Or from GitHub:
+
+```bash
 pi install git:github.com/nilskluewer/pi-permissive
 # or pin a version:
 pi install git:github.com/nilskluewer/pi-permissive@v0.3.0
 ```
 
-Also on npm:
+Try without installing:
 
 ```bash
-pi install npm:pi-permissive
+pi -e git:github.com/nilskluewer/pi-permissive
 ```
 
 ## Tests
 
 ```bash
-cd sandbox/permission-tests
-./run.sh
+npm test
+# or directly:
+cd sandbox/permission-tests && ./run.sh
 ```
 
 Requires Node 22.6+. The suite includes deterministic self-validation: every

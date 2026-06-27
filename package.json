@@ -1,7 +1,7 @@
 {
   "name": "pi-permissive",
   "version": "0.3.0",
-  "description": "A deliberately permissive permission gate for pi — blocks only destructive commands, never nags.",
+  "description": "A deliberately permissive permission gate for the Pi coding agent — blocks only destructive commands, never nags.",
   "type": "module",
   "keywords": [
     "pi-package",
@@ -9,8 +9,10 @@
     "pi-coding-agent",
     "pi-extension",
     "permissions",
+    "permission-gate",
+    "access-control",
     "security",
-    "access-control"
+    "guardrail"
   ],
   "author": {
     "name": "Nils Klüwer"
@@ -27,8 +29,14 @@
     "README.md",
     "LICENSE"
   ],
+  "scripts": {
+    "test": "cd sandbox/permission-tests && ./run.sh"
+  },
   "pi": {
     "extensions": ["./extensions/permissions.ts"]
+  },
+  "engines": {
+    "node": ">=22.6.0"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
